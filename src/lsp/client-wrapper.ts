@@ -1,5 +1,5 @@
-import { existsSync, statSync } from "node:fs";
-import { dirname, extname, join, resolve } from "node:path";
+import { statSync } from "node:fs";
+import { extname, resolve } from "node:path";
 
 import type { LspClient } from "./client.js";
 import {
@@ -12,8 +12,10 @@ import {
 import { getLspManager, type LspManager } from "./manager.js";
 import { findServerForExtension } from "./server-resolution.js";
 import type { ServerLookupResult } from "./types.js";
+import { type FindWorkspaceRootOptions, findWorkspaceRoot } from "./workspace-root.js";
 
-const WORKSPACE_MARKERS = [".git", "package.json", "pyproject.toml", "Cargo.toml", "go.mod", "pom.xml", "build.gradle"];
+export type { CargoMetadataLoader, FindWorkspaceRootOptions } from "./workspace-root.js";
+export { findWorkspaceRoot };
 
 export function isDirectoryPath(filePath: string): boolean {
 	try {
@@ -21,28 +23,6 @@ export function isDirectoryPath(filePath: string): boolean {
 	} catch {
 		return false;
 	}
-}
-
-export function findWorkspaceRoot(filePath: string): string {
-	const abs = resolve(filePath);
-	let dir = abs;
-
-	if (!isDirectoryPath(dir)) {
-		dir = dirname(dir);
-	}
-
-	let prevDir = "";
-	while (dir !== prevDir) {
-		for (const marker of WORKSPACE_MARKERS) {
-			if (existsSync(join(dir, marker))) {
-				return dir;
-			}
-		}
-		prevDir = dir;
-		dir = dirname(dir);
-	}
-
-	return dirname(abs);
 }
 
 export function formatServerLookupError(result: Exclude<ServerLookupResult, { status: "found" }>): string {
@@ -81,9 +61,8 @@ export function formatServerLookupError(result: Exclude<ServerLookupResult, { st
 	].join("\n");
 }
 
-export interface WithLspClientOptions {
-	signal?: AbortSignal;
-	manager?: LspManager;
+export interface WithLspClientOptions extends FindWorkspaceRootOptions {
+	readonly manager?: LspManager;
 }
 
 const READ_ONLY_RETRY_TOOLS = new Set([
@@ -117,8 +96,9 @@ export async function withLspClient<T>(
 	}
 
 	const server = result.server;
-	const root = findWorkspaceRoot(absPath);
-	const manager = options.manager ?? getLspManager();
+	const { manager: optionManager, ...workspaceRootOptions } = options;
+	const root = await findWorkspaceRoot(absPath, server, workspaceRootOptions);
+	const manager = optionManager ?? getLspManager();
 
 	const acquireAndCall = async (allowRetry: boolean): Promise<T> => {
 		const client = await manager.getClient(root, server, options.signal);
