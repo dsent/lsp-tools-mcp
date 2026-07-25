@@ -46,72 +46,72 @@ describe("Cargo workspace declaration cache isolation", () => {
 		return absolute;
 	}
 
-	it.each(workspaceDeclarations)("does not publish a $name nested workspace from outer metadata", async ({
-		manifest,
-	}) => {
-		// Given
-		const outerManifest = write("Cargo.toml", '[workspace]\nmembers = ["tools/nested"]\nresolver = "2"\n');
-		const outerFile = write("src/lib.rs");
-		const nestedManifest = write("tools/nested/Cargo.toml", manifest);
-		const nestedFile = write("tools/nested/src/lib.rs");
-		const nestedRoot = dirname(nestedManifest);
-		const metadataLoader = vi
-			.fn<CargoMetadataLoader>()
-			.mockResolvedValueOnce(cargoMetadata(root, [nestedManifest]))
-			.mockResolvedValueOnce(cargoMetadata(nestedRoot, [nestedManifest]));
+	it.each(workspaceDeclarations)(
+		"does not publish a $name nested workspace from outer metadata",
+		async ({ manifest }) => {
+			// Given
+			const outerManifest = write("Cargo.toml", '[workspace]\nmembers = ["tools/nested"]\nresolver = "2"\n');
+			const outerFile = write("src/lib.rs");
+			const nestedManifest = write("tools/nested/Cargo.toml", manifest);
+			const nestedFile = write("tools/nested/src/lib.rs");
+			const nestedRoot = dirname(nestedManifest);
+			const metadataLoader = vi
+				.fn<CargoMetadataLoader>()
+				.mockResolvedValueOnce(cargoMetadata(root, [nestedManifest]))
+				.mockResolvedValueOnce(cargoMetadata(nestedRoot, [nestedManifest]));
 
-		// When
-		const resolvedOuter = await resolveCargoWorkspaceRoot(outerFile, { cargoMetadataLoader: metadataLoader });
-		const resolvedNested = await resolveCargoWorkspaceRoot(nestedFile, { cargoMetadataLoader: metadataLoader });
+			// When
+			const resolvedOuter = await resolveCargoWorkspaceRoot(outerFile, { cargoMetadataLoader: metadataLoader });
+			const resolvedNested = await resolveCargoWorkspaceRoot(nestedFile, { cargoMetadataLoader: metadataLoader });
 
-		// Then
-		expect({ resolvedOuter, resolvedNested, loaderCalls: metadataLoader.mock.calls.length }).toEqual({
-			resolvedOuter: root,
-			resolvedNested: nestedRoot,
-			loaderCalls: 2,
-		});
-		expect(metadataLoader).toHaveBeenNthCalledWith(1, outerManifest, expect.any(AbortSignal));
-		expect(metadataLoader).toHaveBeenNthCalledWith(2, nestedManifest, expect.any(AbortSignal));
-	});
+			// Then
+			expect({ resolvedOuter, resolvedNested, loaderCalls: metadataLoader.mock.calls.length }).toEqual({
+				resolvedOuter: root,
+				resolvedNested: nestedRoot,
+				loaderCalls: 2,
+			});
+			expect(metadataLoader).toHaveBeenNthCalledWith(1, outerManifest, expect.any(AbortSignal));
+			expect(metadataLoader).toHaveBeenNthCalledWith(2, nestedManifest, expect.any(AbortSignal));
+		},
+	);
 
-	it.each(
-		workspaceDeclarations,
-	)("does not commit an ordinary member changed to a $name workspace while outer metadata is in flight", async ({
-		manifest,
-	}) => {
-		// Given
-		const outerManifest = write("Cargo.toml", '[workspace]\nmembers = ["tools/nested"]\nresolver = "2"\n');
-		const outerFile = write("src/lib.rs");
-		const nestedManifest = write("tools/nested/Cargo.toml", '[package]\nname = "nested"\nversion = "0.1.0"\n');
-		const nestedFile = write("tools/nested/src/lib.rs");
-		const nestedRoot = dirname(nestedManifest);
-		let resolveOuterMetadata: ((value: string) => void) | undefined;
-		const metadataLoader = vi
-			.fn<CargoMetadataLoader>()
-			.mockImplementationOnce(
-				() =>
-					new Promise<string>((resolveMetadata) => {
-						resolveOuterMetadata = resolveMetadata;
-					}),
-			)
-			.mockResolvedValueOnce(cargoMetadata(nestedRoot, [nestedManifest]));
-		const outerResolution = resolveCargoWorkspaceRoot(outerFile, { cargoMetadataLoader: metadataLoader });
+	it.each(workspaceDeclarations)(
+		"does not commit an ordinary member changed to a $name workspace while outer metadata is in flight",
+		async ({ manifest }) => {
+			// Given
+			const outerManifest = write("Cargo.toml", '[workspace]\nmembers = ["tools/nested"]\nresolver = "2"\n');
+			const outerFile = write("src/lib.rs");
+			const nestedManifest = write("tools/nested/Cargo.toml", '[package]\nname = "nested"\nversion = "0.1.0"\n');
+			const nestedFile = write("tools/nested/src/lib.rs");
+			const nestedRoot = dirname(nestedManifest);
+			let resolveOuterMetadata: ((value: string) => void) | undefined;
+			const metadataLoader = vi
+				.fn<CargoMetadataLoader>()
+				.mockImplementationOnce(
+					() =>
+						new Promise<string>((resolveMetadata) => {
+							resolveOuterMetadata = resolveMetadata;
+						}),
+				)
+				.mockResolvedValueOnce(cargoMetadata(nestedRoot, [nestedManifest]));
+			const outerResolution = resolveCargoWorkspaceRoot(outerFile, { cargoMetadataLoader: metadataLoader });
 
-		// When
-		write("tools/nested/Cargo.toml", manifest);
-		resolveOuterMetadata?.(cargoMetadata(root, [nestedManifest]));
-		const resolvedOuter = await outerResolution;
-		const resolvedNested = await resolveCargoWorkspaceRoot(nestedFile, { cargoMetadataLoader: metadataLoader });
+			// When
+			write("tools/nested/Cargo.toml", manifest);
+			resolveOuterMetadata?.(cargoMetadata(root, [nestedManifest]));
+			const resolvedOuter = await outerResolution;
+			const resolvedNested = await resolveCargoWorkspaceRoot(nestedFile, { cargoMetadataLoader: metadataLoader });
 
-		// Then
-		expect({ resolvedOuter, resolvedNested, loaderCalls: metadataLoader.mock.calls.length }).toEqual({
-			resolvedOuter: root,
-			resolvedNested: nestedRoot,
-			loaderCalls: 2,
-		});
-		expect(metadataLoader).toHaveBeenNthCalledWith(1, outerManifest, expect.any(AbortSignal));
-		expect(metadataLoader).toHaveBeenNthCalledWith(2, nestedManifest, expect.any(AbortSignal));
-	});
+			// Then
+			expect({ resolvedOuter, resolvedNested, loaderCalls: metadataLoader.mock.calls.length }).toEqual({
+				resolvedOuter: root,
+				resolvedNested: nestedRoot,
+				loaderCalls: 2,
+			});
+			expect(metadataLoader).toHaveBeenNthCalledWith(1, outerManifest, expect.any(AbortSignal));
+			expect(metadataLoader).toHaveBeenNthCalledWith(2, nestedManifest, expect.any(AbortSignal));
+		},
+	);
 
 	it("does not publish malformed nested manifest content from outer metadata", async () => {
 		// Given
