@@ -36,6 +36,10 @@ export interface JsonRpcResponse {
 }
 
 export interface McpStdioServerOptions {
+	/** @deprecated The host-owned stdio transport no longer has an idle timeout. */
+	readonly idleTimeoutMs?: number;
+	/** @deprecated The host-owned stdio transport no longer invokes an idle callback. */
+	readonly onIdleTimeout?: () => void | Promise<void>;
 	readonly log?: McpLifecycleLog;
 }
 

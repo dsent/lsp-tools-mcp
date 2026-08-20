@@ -87,8 +87,14 @@ describe("lsp MCP server", () => {
 		const input = new PassThrough();
 		const output = new PassThrough();
 		const received: string[] = [];
+		let legacyIdleCallbackCalls = 0;
 		output.on("data", (chunk) => received.push(String(chunk)));
-		const server = runMcpStdioServer(input, output);
+		const server = runMcpStdioServer(input, output, {
+			idleTimeoutMs: 1,
+			onIdleTimeout: () => {
+				legacyIdleCallbackCalls++;
+			},
+		});
 
 		try {
 			await vi.advanceTimersByTimeAsync(10 * 60_000 + 1);
@@ -105,6 +111,7 @@ describe("lsp MCP server", () => {
 
 			expect(received.join("")).toContain('"id":5');
 			expect(received.join("")).toContain("Configured LSP servers");
+			expect(legacyIdleCallbackCalls).toBe(0);
 		} finally {
 			vi.useRealTimers();
 		}
