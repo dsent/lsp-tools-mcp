@@ -27,6 +27,9 @@ printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | node dist/cli.j
 
 ## MCP Tools
 
+`diagnostics` distinguishes "no findings" from "no answer". A server that pushes diagnostics answers when it is ready, so the tool waits for it to report on the document rather than sleeping a fixed interval — ShellCheck on a large script does not finish within a second, and an empty result would otherwise read as a clean file. If the server has said nothing at all about the document by the deadline, the call fails with `diagnostics_unavailable` instead of returning an empty list.
+
+
 This server exposes the following tools:
 
 - `lsp.status`
